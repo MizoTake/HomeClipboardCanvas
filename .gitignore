@@ -1,0 +1,14 @@
+dist/
+tools/
+artifacts/
+frontend/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+backend/web/assets/*
+!backend/web/assets/.gitkeep
+*.exe
+*.pem
+*.key
+config.json
+.env

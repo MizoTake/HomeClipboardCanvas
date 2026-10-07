@@ -1,0 +1,24 @@
+{
+  "name": "home-clipboard-canvas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && vite build",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.10.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.3"
+  }
+}

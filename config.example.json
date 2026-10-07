@@ -1,0 +1,14 @@
+{
+  "bind": "0.0.0.0",
+  "port": 8443,
+  "ttlMinutes": 60,
+  "maxItems": 100,
+  "maxMemoryMB": 200,
+  "maxTextMB": 1,
+  "maxImageMB": 10,
+  "allowedNetworks": [],
+  "certificate": "certificate.pem",
+  "privateKey": "private-key.pem",
+  "token": "REPLACE_WITH_GENERATE_TOKEN_OUTPUT",
+  "logLevel": "INFO"
+}
