@@ -2,7 +2,6 @@ package config
 
 import (
 	"crypto/tls"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,7 +25,6 @@ type Config struct {
 	AllowedNetworks []string `json:"allowedNetworks"`
 	Certificate     string   `json:"certificate"`
 	PrivateKey      string   `json:"privateKey"`
-	Token           string   `json:"token"`
 	LogLevel        string   `json:"logLevel"`
 	DevHTTP         bool     `json:"-"`
 }
@@ -93,10 +91,6 @@ func (c Config) Validate() error {
 	}
 	if _, err := c.Networks(); err != nil {
 		return err
-	}
-	secret, err := base64.RawURLEncoding.DecodeString(c.Token)
-	if err != nil || len(secret) != 32 {
-		return errors.New("a 32-byte base64url token is required; set HCC_TOKEN or config.token")
 	}
 	if !c.DevHTTP {
 		if c.Certificate == "" || c.PrivateKey == "" {

@@ -32,7 +32,6 @@ export class APIError extends Error {
 }
 const messages: Record<number, string> = {
   400: '入力内容を確認してください。',
-  401: '認証の有効期限が切れました。共有トークンで接続してください。',
   403: '接続元またはアクセス方法が許可されていません。',
   404: 'カードが削除されたか、有効期限が切れています。',
   409: 'ほかの端末で変更されました。最新の位置を表示します。',
@@ -41,7 +40,7 @@ const messages: Record<number, string> = {
   429: '操作が集中しています。少し待って再試行してください。',
 };
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...init });
+  const response = await fetch(path, { credentials: 'omit', cache: 'no-store', ...init });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     throw new APIError(response.status, messages[response.status] ?? 'サーバーに接続できませんでした。', payload.item);
@@ -56,7 +55,7 @@ export function zoomAt(view: Viewport, zoom: number, point: { x: number; y: numb
 }
 
 export async function clipboardImage(item: Item): Promise<Blob> {
-  const response = await fetch(imageURL(item), { credentials: 'same-origin', cache: 'no-store' });
+  const response = await fetch(imageURL(item), { credentials: 'omit', cache: 'no-store' });
   if (!response.ok) throw new Error('画像の有効期限が切れた可能性があります。');
   const blob = await response.blob();
   if (blob.type === 'image/png') return blob;

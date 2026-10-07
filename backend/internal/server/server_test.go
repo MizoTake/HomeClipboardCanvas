@@ -1,13 +1,10 @@
 package server
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -19,37 +16,12 @@ import (
 	"homeclipboardcanvas/web"
 )
 
-var testToken = base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
-
 func newTestServer(t *testing.T) (*httptest.Server, *http.Client) {
 	t.Helper()
-	app, err := New(Options{Token: testToken, DevHTTP: true, Limits: board.DefaultLimits(), Assets: web.Assets()})
-	if err != nil {
-		t.Fatal(err)
-	}
+	app := New(Options{DevHTTP: true, Limits: board.DefaultLimits(), Assets: web.Assets()})
 	ts := httptest.NewServer(app.Handler())
 	t.Cleanup(ts.Close)
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	return ts, client
-}
-
-func login(t *testing.T, ts *httptest.Server, client *http.Client) {
-	t.Helper()
-	r, _ := http.NewRequest("POST", ts.URL+"/api/session", strings.NewReader(`{"token":"`+testToken+`"}`))
-	r.Header.Set("Origin", ts.URL)
-	r.Header.Set("Content-Type", "application/json")
-	resp, err := client.Do(r)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 204 {
-		t.Fatalf("login: %d", resp.StatusCode)
-	}
-	if cookies := resp.Cookies(); len(cookies) != 1 || !cookies[0].HttpOnly || cookies[0].SameSite != http.SameSiteStrictMode {
-		t.Fatal("unsafe session cookie")
-	}
+	return ts, ts.Client()
 }
 
 func TestLANAddressPolicy(t *testing.T) {
@@ -65,18 +37,20 @@ func TestLANAddressPolicy(t *testing.T) {
 	}
 }
 
-func TestAuthenticationOriginAndSizeLimit(t *testing.T) {
+func TestLANAccessNeedsNoTokenAndPreservesOriginAndSizeLimits(t *testing.T) {
 	ts, client := newTestServer(t)
 	resp, _ := client.Get(ts.URL + "/api/board")
 	resp.Body.Close()
-	if resp.StatusCode != 401 {
-		t.Fatalf("unauthenticated: %d", resp.StatusCode)
+	if resp.StatusCode != 200 {
+		t.Fatalf("LAN access without credentials: %d", resp.StatusCode)
 	}
-	login(t, ts, client)
+	if len(resp.Cookies()) != 0 {
+		t.Fatal("LAN access issued an authentication cookie")
+	}
 	resp, _ = client.Get(ts.URL + "/api/board")
 	resp.Body.Close()
 	if resp.StatusCode != 200 || resp.Header.Get("X-Content-Type-Options") != "nosniff" || resp.Header.Get("Referrer-Policy") != "no-referrer" {
-		t.Fatal("authenticated response or headers invalid")
+		t.Fatal("LAN response or headers invalid")
 	}
 	r, _ := http.NewRequest("POST", ts.URL+"/api/items", strings.NewReader(`{"text":"bad","width":320,"height":240}`))
 	r.Header.Set("Origin", "https://external.invalid")
@@ -97,7 +71,6 @@ func TestAuthenticationOriginAndSizeLimit(t *testing.T) {
 
 func TestWebSocketSnapshotBroadcastDeleteAndClear(t *testing.T) {
 	ts, client := newTestServer(t)
-	login(t, ts, client)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(ts.URL, "http")+"/api/ws", &websocket.DialOptions{HTTPClient: client, HTTPHeader: http.Header{"Origin": []string{ts.URL}}})
@@ -154,7 +127,6 @@ func TestWebSocketSnapshotBroadcastDeleteAndClear(t *testing.T) {
 
 func TestWebSocketRejectsUntrustedOrigin(t *testing.T) {
 	ts, client := newTestServer(t)
-	login(t, ts, client)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	_, resp, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(ts.URL, "http")+"/api/ws", &websocket.DialOptions{HTTPClient: client, HTTPHeader: http.Header{"Origin": []string{"https://evil.invalid"}}})

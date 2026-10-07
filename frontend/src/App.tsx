@@ -1,15 +1,13 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Canvas } from './Canvas';
-import { api, APIError, copyItem, initialViewport, jsonRequest, zoomAt, type Geometry, type Item, type Viewport } from './model';
+import { api, copyItem, initialViewport, jsonRequest, zoomAt, type Geometry, type Item, type Viewport } from './model';
 import { useBoard } from './useBoard';
 
 export default function App() {
   const [notice, setNotice] = useState('');
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const notify = useCallback((message: string) => { setNotice(message); clearTimeout(noticeTimer.current); noticeTimer.current = setTimeout(() => setNotice(''), 6500) }, []);
-  const { board, authenticated, checking, online, initial, login, clockOffset, resetAuth } = useBoard(notify);
-  const [token, setToken] = useState('');
-  const [loggingIn, setLoggingIn] = useState(false);
+  const { board, ready, checking, online, initial, clockOffset } = useBoard();
   const [viewport, setViewport] = useState<Viewport>(initialViewport);
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
@@ -30,12 +28,12 @@ export default function App() {
   const onViewport = useCallback((v: Viewport) => { setViewport({ ...v, lastInteractionAt: Date.now() + clockOffset.current }) }, []);
 
   useEffect(() => {
-    if (!authenticated || viewport.lastInteractionAt === 0) return;
+    if (!ready || viewport.lastInteractionAt === 0) return;
     const timer = setTimeout(() => { void api('/api/viewport', jsonRequest('POST', viewport)).catch(() => {}) }, 800);
     return () => clearTimeout(timer);
-  }, [viewport, authenticated]);
+  }, [viewport, ready]);
   useEffect(() => {
-    if (!authenticated) return;
+    if (!ready) return;
     const save = () => {
       const v = viewportRef.current;
       if (v.lastInteractionAt > 0) navigator.sendBeacon('/api/viewport', new Blob([JSON.stringify(v)], { type: 'application/json' }));
@@ -44,12 +42,9 @@ export default function App() {
     const visibility = () => { if (document.visibilityState === 'hidden') save() };
     addEventListener('pagehide', save); addEventListener('beforeunload', save); document.addEventListener('visibilitychange', visibility);
     return () => { removeEventListener('pagehide', save); removeEventListener('beforeunload', save); document.removeEventListener('visibilitychange', visibility) };
-  }, [authenticated]);
+  }, [ready]);
 
   const handleError = (error: unknown) => {
-    if (error instanceof APIError) {
-      if (error.status === 401) resetAuth();
-    }
     notify(error instanceof Error ? error.message : '操作に失敗しました。');
   };
   const geometry = (width = 340, height = 240): Geometry => {
@@ -90,7 +85,7 @@ export default function App() {
   const update = async (item: Item, g: Geometry) => { if (!online) { notify('再接続が完了してから操作してください。'); return }; try { await api<Item>(`/api/items/${item.id}`, jsonRequest('PATCH', { x: g.x, y: g.y, width: g.width, height: g.height, revision: item.revision })) } catch (error) { handleError(error) } };
 
   useEffect(() => {
-    if (!authenticated) return;
+    if (!ready) return;
     const editable = (target: EventTarget | null) => target instanceof HTMLElement && !!target.closest('input,textarea,[contenteditable="true"]');
     const paste = (event: ClipboardEvent) => {
       if (editable(event.target) || compose || clear || help) return;
@@ -111,7 +106,7 @@ export default function App() {
     };
     addEventListener('paste', paste); addEventListener('keydown', keydown);
     return () => { removeEventListener('paste', paste); removeEventListener('keydown', keydown) };
-  }, [authenticated, board, selected, online, compose, clear, help]);
+  }, [ready, board, selected, online, compose, clear, help]);
 
   const pasteButton = async () => {
     if (!navigator.clipboard?.read) { setCompose(true); notify('入力欄に貼り付けるか、「画像を選ぶ」を使ってください。'); return }
@@ -124,10 +119,6 @@ export default function App() {
       for (const content of contents) { if (content.types.includes('text/plain')) { await addText(await (await content.getType('text/plain')).text()); return } }
       notify('クリップボードにテキストや画像がありません。');
     } catch { notify('クリップボードの読み取りを許可するか、Ctrl＋Vを使ってください。スマートフォンでは入力欄への貼り付けも使えます。'); setCompose(true) }
-  };
-  const authenticate = async (event: FormEvent) => {
-    event.preventDefault(); setLoggingIn(true);
-    try { await login(token.trim()); setToken('') } catch (error) { handleError(error) } finally { setLoggingIn(false) }
   };
   const zoom = (factor: number) => { const rect = main.current!.getBoundingClientRect(); onViewport(zoomAt(viewport, viewport.zoom * factor, { x: rect.width / 2, y: rect.height / 2 })) };
   const latest = board?.items.find(item => item.id === board.lastCreatedItemId);
@@ -142,23 +133,18 @@ export default function App() {
 
   return <div className="app">
     <header className="app-header"><div className="brand"><span className="brand-symbol" aria-hidden="true">▤</span><div><h1>Home Clipboard <span>Canvas</span></h1><p>家のなかの、小さな受け渡し場所。</p></div></div>
-      {authenticated && <div className={`connection ${online ? 'online' : ''}`} role="status"><span className="status-dot" />{online ? `${board?.devices ?? 0} 台 接続中` : '再接続中…'}</div>}
+      <div className={`connection ${online ? 'online' : ''}`} role="status"><span className="status-dot" />{online ? `${board?.devices ?? 0} 台 接続中` : checking ? '接続中…' : '再接続中…'}</div>
     </header>
-    {!authenticated ? <main className="login-main"><div className="login-box"><p className="eyebrow">PRIVATE · LOCAL · TEMPORARY</p><h2>おうちのキャンバスに<br />つながろう。</h2><p>サーバーで発行した共有トークンを入力してください。<br />同じLANの端末だけがアクセスできます。</p>
-      {checking ? <p role="status">接続を確認しています…</p> : <form onSubmit={authenticate}><label htmlFor="token">共有トークン</label><input id="token" type="password" value={token} onChange={e => setToken(e.target.value)} autoComplete="off" spellCheck={false} required placeholder="共有トークンを貼り付け" /><button className="primary" type="submit" disabled={loggingIn}>{loggingIn ? '接続しています…' : 'キャンバスを開く →'}</button></form>}
-      <div className="privacy-note"><span aria-hidden="true">◷</span> データは一時的。サーバー終了時にすべて消えます。</div></div></main>
-      : <>
-        <nav className="toolbar" aria-label="キャンバス操作"><div className="add-tools"><button className="primary" onClick={() => setCompose(true)} disabled={!online}>＋ <span>テキストを置く</span></button><button onClick={() => void pasteButton()} disabled={!online}>▣ <span>貼り付け</span></button><button onClick={() => fileInput.current?.click()} disabled={!online}>▧ <span>画像を選ぶ</span></button></div><div className="board-tools"><span className="item-count">{board?.items.length ?? 0} / {board?.limits.maxItems ?? 100}</span><button className="clear-button" onClick={() => setClear(true)} disabled={!online || !board?.items.length}>すべて削除</button><button className="help-button" aria-label="操作ガイド" onClick={() => setHelp(true)}>?</button></div></nav>
-        <main ref={main} className="board-area" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const image = [...e.dataTransfer.files].find(file => file.type.startsWith('image/')); if (image) void addImage(image); else { const value = e.dataTransfer.getData('text/plain'); if (value) void addText(value) } }}>
-          <Canvas items={board?.items ?? []} viewport={viewport} onViewport={onViewport} selected={selected} onSelect={setSelected} onUpdate={(item, g) => void update(item, g)} onCopy={item => void copy(item)} onDelete={item => void remove(item)} now={now + clockOffset.current} onCompose={() => setCompose(true)} />
-          {!online && <div className="offline-banner" role="status">接続を回復しています。復帰すると最新の状態に更新されます。</div>}
-          {latest && Date.parse(latest.createdAt) > seen && <button className="new-item" onClick={jump}>新しいカードへ ↗</button>}
-          <div className="zoom-tools" aria-label="表示倍率"><button aria-label="縮小" onClick={() => zoom(1 / 1.2)}>−</button><button className="zoom-value" aria-label="表示をリセット" onClick={() => onViewport(initialViewport)}>{Math.round(viewport.zoom * 100)}%</button><button aria-label="拡大" onClick={() => zoom(1.2)}>＋</button></div>
-          <div className="canvas-caption">背景をドラッグで移動 · ホイールでズーム</div>
-        </main>
-        <footer className="app-footer"><span><span className="status-dot" /> RAMだけに保存</span><span>{((board?.memoryBytes ?? 0) / (1 << 20)).toFixed(1)} / {(board?.limits.maxMemoryBytes ?? 200 << 20) / (1 << 20)} MB <span className="footer-separator">·</span> 期限になると自動削除</span></footer>
-        <input className="visually-hidden" aria-label="画像ファイル" type="file" accept="image/png,image/jpeg,image/gif" ref={fileInput} onChange={e => { const file = e.target.files?.[0]; if (file) void addImage(file); e.target.value = '' }} />
-      </>}
+    <nav className="toolbar" aria-label="キャンバス操作"><div className="add-tools"><button className="primary" onClick={() => setCompose(true)} disabled={!online}>＋ <span>テキストを置く</span></button><button onClick={() => void pasteButton()} disabled={!online}>▣ <span>貼り付け</span></button><button onClick={() => fileInput.current?.click()} disabled={!online}>▧ <span>画像を選ぶ</span></button></div><div className="board-tools"><span className="item-count">{board?.items.length ?? 0} / {board?.limits.maxItems ?? 100}</span><button className="clear-button" onClick={() => setClear(true)} disabled={!online || !board?.items.length}>すべて削除</button><button className="help-button" aria-label="操作ガイド" onClick={() => setHelp(true)}>?</button></div></nav>
+    <main ref={main} className="board-area" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const image = [...e.dataTransfer.files].find(file => file.type.startsWith('image/')); if (image) void addImage(image); else { const value = e.dataTransfer.getData('text/plain'); if (value) void addText(value) } }}>
+      <Canvas items={board?.items ?? []} viewport={viewport} onViewport={onViewport} selected={selected} onSelect={setSelected} onUpdate={(item, g) => void update(item, g)} onCopy={item => void copy(item)} onDelete={item => void remove(item)} now={now + clockOffset.current} onCompose={() => setCompose(true)} />
+      {!online && <div className="offline-banner" role="status">{checking ? 'キャンバスに接続しています…' : '接続を回復しています。復帰すると最新の状態に更新されます。'}</div>}
+      {latest && Date.parse(latest.createdAt) > seen && <button className="new-item" onClick={jump}>新しいカードへ ↗</button>}
+      <div className="zoom-tools" aria-label="表示倍率"><button aria-label="縮小" onClick={() => zoom(1 / 1.2)}>−</button><button className="zoom-value" aria-label="表示をリセット" onClick={() => onViewport(initialViewport)}>{Math.round(viewport.zoom * 100)}%</button><button aria-label="拡大" onClick={() => zoom(1.2)}>＋</button></div>
+      <div className="canvas-caption">背景をドラッグで移動 · ホイールでズーム</div>
+    </main>
+    <footer className="app-footer"><span><span className="status-dot" /> RAMだけに保存</span><span>{((board?.memoryBytes ?? 0) / (1 << 20)).toFixed(1)} / {(board?.limits.maxMemoryBytes ?? 200 << 20) / (1 << 20)} MB <span className="footer-separator">·</span> 期限になると自動削除</span></footer>
+    <input className="visually-hidden" aria-label="画像ファイル" type="file" accept="image/png,image/jpeg,image/gif" ref={fileInput} onChange={e => { const file = e.target.files?.[0]; if (file) void addImage(file); e.target.value = '' }} />
     {compose && <Modal title="テキストを置く" close={() => setCompose(false)}><form onSubmit={e => { e.preventDefault(); void addText(text) }}><label htmlFor="text">共有するテキスト</label><textarea id="text" autoFocus value={text} onChange={e => setText(e.target.value)} placeholder="URL、コマンド、メモなどを貼り付け" rows={7} /><p className="form-note">プレーンテキストとして共有されます。作成時から有効期限が始まります。</p><div className="modal-actions"><button type="button" onClick={() => setCompose(false)}>キャンセル</button><button className="primary" disabled={busy || !online || !text.trim()}>共有する →</button></div></form></Modal>}
     {clear && <Modal title="すべてのカードを削除しますか？" close={() => setClear(false)}><p>接続中のすべての端末からテキストと画像が消えます。この操作は取り消せません。</p><div className="modal-actions"><button onClick={() => setClear(false)}>キャンセル</button><button className="danger" disabled={busy || !online} onClick={() => void clearBoard()}>すべて削除</button></div></Modal>}
     {help && <Modal title="キャンバスの使い方" close={() => setHelp(false)}><dl className="help-list"><dt>貼り付け</dt><dd>Ctrl＋V。スマートフォンではテキスト入力や画像選択を使えます。</dd><dt>カード移動</dt><dd>カード上部をドラッグ。本文は選択してコピーできます。</dd><dt>サイズ変更</dt><dd>選択したカードの右下をドラッグ。キーボードではサイズ変更ボタンにフォーカスして矢印キー。</dd><dt>表示移動</dt><dd>背景をドラッグ。ホイールでズーム。スマートフォンでは2本指で移動・拡大縮小。</dd><dt>取り出す</dt><dd>コピーを押すか、選択してCtrl＋C。画像は「開く」「保存」も使えます。長押しでコピーメニュー。</dd><dt>期限・プライバシー</dt><dd>初期設定では1時間で自動削除。サーバー終了でもすべて消えます。</dd></dl></Modal>}

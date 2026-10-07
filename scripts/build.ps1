@@ -12,6 +12,9 @@ New-Item -ItemType Directory -Path (Join-Path $ProjectRoot 'backend\web\assets')
 [IO.File]::WriteAllText((Join-Path $ProjectRoot 'backend\web\assets\.gitkeep'), '', [Text.UTF8Encoding]::new($false))
 Copy-Item -Path (Join-Path $ProjectRoot 'frontend\dist\*') -Destination (Join-Path $ProjectRoot 'backend\web\assets') -Recurse
 New-Item -ItemType Directory -Path (Join-Path $ProjectRoot 'dist') -Force | Out-Null
+foreach ($notice in @('LICENSE', 'THIRD_PARTY_NOTICES.md')) {
+  Copy-Item -LiteralPath (Join-Path $ProjectRoot $notice) -Destination (Join-Path $ProjectRoot 'dist')
+}
 Push-Location (Join-Path $ProjectRoot 'backend')
 $previousCGO = $env:CGO_ENABLED
 try {

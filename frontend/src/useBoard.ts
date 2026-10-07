@@ -1,40 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, APIError, type Board, type BoardEvent, jsonRequest } from './model';
+import type { Board, BoardEvent } from './model';
 
-export function useBoard(notify: (message: string) => void) {
+export function useBoard() {
   const [board, setBoard] = useState<Board | null>(null);
-  const [authenticated, setAuthenticated] = useState(false);
   const [checking, setChecking] = useState(true);
   const [online, setOnline] = useState(false);
   const [initial, setInitial] = useState<Board | null>(null);
   const clockOffset = useRef(0);
-  const login = async (token: string) => {
-    await api('/api/session', jsonRequest('POST', { token }));
-    const snapshot = await api<Board>('/api/board');
-    setBoard(snapshot); setInitial(snapshot); setAuthenticated(true);
-    clockOffset.current = Date.parse(snapshot.serverTime) - Date.now();
-  };
+  const receivedInitial = useRef(false);
 
   useEffect(() => {
-    let active = true;
-    const url = new URL(location.href);
-    const token = url.searchParams.get('token');
-    if (token !== null) { url.searchParams.delete('token'); history.replaceState(null, '', url.pathname + url.search + url.hash) }
-    async function bootstrap() {
-      try {
-        if (token) await api('/api/session', jsonRequest('POST', { token }));
-        const snapshot = await api<Board>('/api/board');
-        if (active) { setBoard(snapshot); setInitial(snapshot); setAuthenticated(true); clockOffset.current = Date.parse(snapshot.serverTime) - Date.now() }
-      } catch (error) {
-        if (active && (!(error instanceof APIError) || error.status !== 401 || token)) notify(error instanceof Error ? error.message : '接続できませんでした。');
-      } finally { if (active) setChecking(false) }
-    }
-    void bootstrap();
-    return () => { active = false };
-  }, []);
-
-  useEffect(() => {
-    if (!authenticated) return;
     let stopped = false;
     let socket: WebSocket | undefined;
     let timer: ReturnType<typeof setTimeout>;
@@ -49,7 +24,9 @@ export function useBoard(notify: (message: string) => void) {
         const message = JSON.parse(event.data) as BoardEvent;
         if (message.type === 'board.snapshot' && message.snapshot) {
           clockOffset.current = Date.parse(message.snapshot.serverTime) - Date.now();
-          setBoard(message.snapshot); setOnline(true); attempt = 0;
+          setBoard(message.snapshot); setOnline(true); setChecking(false); attempt = 0;
+          // 再接続時に利用中の表示位置を初期位置へ戻さない。
+          if (!receivedInitial.current) { receivedInitial.current = true; setInitial(message.snapshot) }
           return;
         }
         setBoard(previous => {
@@ -66,15 +43,11 @@ export function useBoard(notify: (message: string) => void) {
           return next;
         });
       };
-      current.onclose = async () => {
+      current.onclose = () => {
         if (stopped || socket !== current) return;
-        setOnline(false);
+        setOnline(false); setChecking(false);
         if (!navigator.onLine) return;
-        try { await api('/api/board') } catch (error) {
-          if (stopped || socket !== current) return;
-          if (error instanceof APIError && error.status === 401) { setAuthenticated(false); setBoard(null); notify(error.message); return }
-        }
-        if (!stopped && socket === current) timer = setTimeout(connect, Math.min(1000 * 2 ** attempt++, 15000));
+        timer = setTimeout(connect, Math.min(1000 * 2 ** attempt++, 15000));
       };
     };
     const offline = () => { setOnline(false); socket?.close() };
@@ -82,8 +55,7 @@ export function useBoard(notify: (message: string) => void) {
     addEventListener('offline', offline); addEventListener('online', online);
     connect();
     return () => { stopped = true; clearTimeout(timer); socket?.close(); removeEventListener('offline', offline); removeEventListener('online', online) };
-  }, [authenticated]);
+  }, []);
 
-  const resetAuth = () => { setAuthenticated(false); setBoard(null) };
-  return { board, authenticated, checking, online, initial, login, clockOffset, resetAuth };
+  return { board, ready: board !== null, checking, online, initial, clockOffset };
 }

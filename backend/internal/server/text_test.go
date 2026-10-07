@@ -10,7 +10,6 @@ import (
 
 func TestTextLimitUsesDecodedContentRatherThanJSONEscaping(t *testing.T) {
 	ts, client := newTestServer(t)
-	login(t, ts, client)
 	data, _ := json.Marshal(map[string]any{"text": strings.Repeat("\\", 1<<20), "width": 320, "height": 240})
 	r, _ := http.NewRequest("POST", ts.URL+"/api/items", bytes.NewReader(data))
 	r.Header.Set("Origin", ts.URL)

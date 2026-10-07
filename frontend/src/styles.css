@@ -58,8 +58,8 @@ h1 span { color: var(--green); }
 .empty-mark span:first-child { top: 0; right: 0; transform: rotate(8deg); }
 .empty-mark span:last-child { bottom: 0; left: 0; transform: rotate(-8deg); }
 .eyebrow { color: var(--green); letter-spacing: 2px; font-size: 9px; font-weight: 600; }
-.empty-board h2, .login-box h2 { font-family: 'Yu Mincho', 'Hiragino Mincho ProN', Georgia, serif; font-size: 30px; font-weight: 500; line-height: 1.6; letter-spacing: 1px; margin: 17px 0 15px; }
-.empty-board > p:not(.eyebrow), .login-box > p:not(.eyebrow) { color: var(--muted); line-height: 1.9; font-size: 12px; }
+.empty-board h2 { font-family: 'Yu Mincho', 'Hiragino Mincho ProN', Georgia, serif; font-size: 30px; font-weight: 500; line-height: 1.6; letter-spacing: 1px; margin: 17px 0 15px; }
+.empty-board > p:not(.eyebrow) { color: var(--muted); line-height: 1.9; font-size: 12px; }
 .empty-board .primary { margin-top: 16px; padding: 12px 23px; font-size: 12px; }
 .paste-hint { display: block; font-size: 10px; color: var(--muted); margin-top: 18px; }
 kbd { border: 1px solid var(--line); background: white; border-radius: 4px; padding: 3px 5px; font-family: inherit; font-size: 10px; box-shadow: 0 1px 0 #ccd3c9; }
@@ -72,12 +72,6 @@ kbd { border: 1px solid var(--line); background: white; border-radius: 4px; padd
 .app-footer { display: flex; justify-content: space-between; padding: 11px 30px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; background: var(--white); }
 .app-footer > span:first-child { display: flex; align-items: center; gap: 7px; }
 .footer-separator { margin: 0 9px; }
-.login-main { flex: 1; display: grid; place-items: center; background-image: radial-gradient(#ccd3c9 .9px, transparent .9px); background-size: 24px 24px; padding: 24px; overflow: auto; }
-.login-box { width: 460px; max-width: 100%; padding: 36px 42px; background: var(--white); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 24px #00000007; }
-.login-box form { margin-top: 30px; }
-.login-box .primary { width: 100%; margin-top: 12px; }
-.login-box label { font-size: 12px; }
-.privacy-note { display: flex; gap: 8px; align-items: center; border-top: 1px solid var(--line); padding-top: 20px; margin-top: 30px; color: var(--muted); font-size: 10px; line-height: 1.7; }
 .modal { color: var(--ink); border: 1px solid var(--line); border-radius: 14px; padding: 25px; width: 500px; max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); box-shadow: 0 20px 80px #0002; }
 .modal::backdrop { background: #21382955; backdrop-filter: blur(2px); }
 .modal-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; gap: 15px; }
@@ -113,8 +107,6 @@ kbd { border: 1px solid var(--line); background: white; border-radius: 4px; padd
   .zoom-tools { right: 14px; bottom: 15px; }
   .app-footer { padding: 10px 13px; font-size: 9px; gap: 10px; }
   .footer-separator { margin: 0 3px; }
-  .login-box { padding: 27px; }
-  .login-box h2 { font-size: 26px; }
   .card-footer button { min-height: 32px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }

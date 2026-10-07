@@ -10,5 +10,10 @@ backend/web/assets/*
 *.exe
 *.pem
 *.key
+*.pfx
+*.p12
+*.jks
 config.json
 .env
+.env.*
+!.env.example

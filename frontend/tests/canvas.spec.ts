@@ -1,9 +1,7 @@
 import { test, expect, type Page, type WebSocketRoute } from '@playwright/test';
 import path from 'node:path';
 import { deflateSync } from 'node:zlib';
-import { readFileSync } from 'node:fs';
 
-const token = Buffer.alloc(32, 7).toString('base64url');
 function makePNG() {
   const chunk = (type: string, data: Buffer) => {
     const input = Buffer.concat([Buffer.from(type), data]);
@@ -20,8 +18,7 @@ function makePNG() {
 }
 const png = makePNG();
 
-async function login(page: Page) {
-  await page.context().addCookies(JSON.parse(readFileSync('../tools/test-session.json', 'utf8')).cookies);
+async function openCanvas(page: Page) {
   await page.goto('/');
   await expect(page.getByText(/\d+ 台 接続中/)).toBeVisible();
 }
@@ -40,7 +37,7 @@ async function addText(page: Page, text: string) {
 }
 
 test.beforeEach(async ({ page }) => {
-  await login(page); await reset(page);
+  await openCanvas(page); await reset(page);
   // テストの高速連続アクセスを理由に、本番のレート制限を無効化しない。
   await new Promise(resolve => setTimeout(resolve, 1000));
 });
@@ -87,7 +84,7 @@ test('画像優先の貼り付けと元画像の取得・保存・コピー', as
 
 test('2つのブラウザで追加・移動・削除・全削除が同期する', async ({ page, browser }) => {
   const second = await browser.newPage();
-  await login(second);
+  await openCanvas(second);
   await addText(page, 'リアルタイム共有');
   await expect(second.locator('.card-content')).toHaveText('リアルタイム共有');
   await page.getByRole('button', { name: 'カードを削除' }).click();
@@ -130,11 +127,12 @@ test('再接続で最新の完全状態を取得し表示位置は勝手に動�
   await expect(page.getByRole('button', { name: '表示をリセット' })).toHaveText('120%');
 });
 
-test('共有URLからトークンを消し、別端末の表示操作に追従しない', async ({ page, browser }, info) => {
+test('URLを開くだけで接続でき、別端末の表示操作に追従しない', async ({ page, browser }, info) => {
   const second = await browser.newPage();
-  await second.goto(`/?token=${token}`);
+  await second.goto('/');
   await expect(second.getByText(/\d+ 台 接続中/)).toBeVisible();
-  expect(second.url()).not.toContain('token');
+  await expect(second.getByRole('textbox')).toHaveCount(0);
+  expect(await second.context().cookies()).toEqual([]);
   await second.getByRole('button', { name: '拡大', exact: true }).click();
   await expect(page.getByRole('button', { name: '表示をリセット' })).toHaveText('100%');
   await second.close();

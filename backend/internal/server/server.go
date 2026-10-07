@@ -19,10 +19,7 @@ import (
 	"homeclipboardcanvas/internal/board"
 )
 
-var errToken = errors.New("token must be a base64url encoded 32-byte secret; use generate-token")
-
 type Options struct {
-	Token           string
 	DevHTTP         bool
 	AllowedNetworks []netip.Prefix
 	Limits          board.Limits
@@ -31,28 +28,22 @@ type Options struct {
 }
 
 type App struct {
-	Store    *board.Store
-	opts     Options
-	sessions *sessions
-	rate     limiter
-	uploads  chan struct{}
+	Store   *board.Store
+	opts    Options
+	rate    limiter
+	uploads chan struct{}
 }
 
-func New(o Options) (*App, error) {
-	sessions, err := newSessions(o.Token, o.DevHTTP)
-	if err != nil {
-		return nil, err
-	}
+func New(o Options) *App {
 	if o.Logger == nil {
 		o.Logger = slog.Default()
 	}
-	return &App{Store: board.New(o.Limits), opts: o, sessions: sessions, uploads: make(chan struct{}, 2)}, nil
+	return &App{Store: board.New(o.Limits), opts: o, uploads: make(chan struct{}, 2)}
 }
 
 func (a *App) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) })
-	mux.HandleFunc("POST /api/session", a.login)
 	mux.HandleFunc("GET /api/board", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, a.Store.Snapshot()) })
 	mux.HandleFunc("DELETE /api/board", func(w http.ResponseWriter, r *http.Request) { a.Store.Clear(); w.WriteHeader(204) })
 	mux.HandleFunc("POST /api/items", a.createText)
@@ -99,10 +90,6 @@ func (a *App) Handler() http.Handler {
 			fail(w, 403, "HTTPS required")
 			return
 		}
-		if r.URL.Query().Has("token") && (r.URL.Path != "/" || r.Method != "GET") {
-			fail(w, 400, "authenticate using POST /api/session")
-			return
-		}
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			if r.Method != "GET" || r.URL.Path == "/api/ws" {
 				if !sameOrigin(r) {
@@ -114,10 +101,6 @@ func (a *App) Handler() http.Handler {
 			if !a.rate.allow(host, 80, 4) {
 				w.Header().Set("Retry-After", "1")
 				fail(w, 429, "too many requests")
-				return
-			}
-			if r.URL.Path != "/api/session" && !a.sessions.valid(r) {
-				fail(w, 401, "authentication required")
 				return
 			}
 		}
@@ -161,26 +144,6 @@ func decode(w http.ResponseWriter, r *http.Request, max int64, target any) bool 
 	return true
 }
 
-func (a *App) login(w http.ResponseWriter, r *http.Request) {
-	host, _, _ := net.SplitHostPort(r.RemoteAddr)
-	if !a.rate.allow("login:"+host, 8, 1.0/10) {
-		w.Header().Set("Retry-After", "10")
-		fail(w, 429, "too many login attempts")
-		return
-	}
-	var payload struct {
-		Token string `json:"token"`
-	}
-	if !decode(w, r, 1024, &payload) {
-		return
-	}
-	if !a.sessions.tokenValid(payload.Token) {
-		fail(w, 401, "invalid token")
-		return
-	}
-	a.sessions.issue(w)
-	w.WriteHeader(204)
-}
 func (a *App) createText(w http.ResponseWriter, r *http.Request) {
 	select {
 	case a.uploads <- struct{}{}:
@@ -339,7 +302,7 @@ func (a *App) socket(w http.ResponseWriter, r *http.Request) {
 			timeout, stop := context.WithTimeout(ctx, 10*time.Second)
 			err := conn.Ping(timeout)
 			stop()
-			if err != nil || !a.sessions.valid(r) {
+			if err != nil {
 				return
 			}
 		}

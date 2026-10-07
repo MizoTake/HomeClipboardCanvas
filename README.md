@@ -1,8 +1,8 @@
 # Home Clipboard Canvas
 
-家庭内LANで使う、一時的な共有クリップボードキャンバスです。テキストや画像をブラウザから置き、別の端末へコピーできます。カード、画像、表示位置はサーバーのRAMだけに保持し、初期設定では作成から1時間で削除します。サーバーを終了すると内容と認証セッションが消えます。
+家庭内LANで使う、一時的な共有クリップボードキャンバスです。テキストや画像をブラウザから置き、別の端末へコピーできます。LAN内ではURLを開くだけで利用でき、トークンやログインは不要です。カード、画像、表示位置はサーバーのRAMだけに保持し、初期設定では作成から1時間で削除します。サーバーを終了すると内容が消えます。
 
-Go製のサーバーにReactのWeb UIを埋め込み、`dist/HomeClipboardCanvas.exe` 単体で配布できます。利用端末にGoやNode.jsは不要です。
+Go製のサーバーにReactのWeb UIを埋め込み、`dist/HomeClipboardCanvas.exe` 単体で起動できます。利用端末にGoやNode.jsは不要です。配布時はdist内のライセンス文書も同梱します。
 
 ## 開発PCで試す
 
@@ -12,7 +12,7 @@ PowerShellでプロジェクトのルートから実行します。
 .\scripts\dev.ps1
 ```
 
-ビルド後、[http://127.0.0.1:8080](http://127.0.0.1:8080) を開きます。`tools/dev-token.txt` の共有トークンを入力してください。生成したトークンファイルは正常終了時に削除します。Ctrl＋Cでサーバーを終了します。強制終了でファイルが残った場合は手動で削除できます。
+ビルド後、[http://127.0.0.1:8080](http://127.0.0.1:8080) を開くとキャンバスに接続します。Ctrl＋Cでサーバーを終了します。
 
 開発モードはloopback IPへのbindしか許可しません。Startup、レジストリ、Firewall、証明書ストア、hosts、DNSは変更しません。開発中に `install-startup` を実行しないでください。
 
@@ -40,7 +40,7 @@ PowerShellでプロジェクトのルートから実行します。
 
 ## ビルドとテスト
 
-必要環境はWindows、Go 1.25以上、Node.js 22.12以上、npmです。この作業環境ではGoを `tools/go` にプロジェクト内展開しています。スクリプトはPATH上のGo、次に `tools/go/bin/go.exe` を探します。
+必要環境はWindows、Go 1.25以上、Node.js 22.12以上、npmです。スクリプトはPATH上のGo、次に `tools/go/bin/go.exe` を探します。Goの公式Windows ZIPを `tools/go` に展開する方法も使えます。
 
 ```powershell
 .\scripts\build.ps1
@@ -54,7 +54,7 @@ $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $PWD 'tools\browsers'
 node .\scripts\acceptance.mjs
 ```
 
-AcceptanceはEXEを `tools/acceptance` にコピーしてlocalhostだけで起動します。再起動後の消去を確認し、TTLをテスト用に1分へ設定して、実時間で期限切れ通知を待ちます。通常は1〜2分かかります。結果は `artifacts/acceptance.json` に出力し、プロセスとテスト設定は終了時に片付けます。標準の1時間TTLはGoの時計を差し替えたテストで検証します。
+AcceptanceはEXEを `tools/acceptance` にコピーしてlocalhostだけで起動します。再起動後の消去と、ページ再読み込みなしでの自動再接続を確認します。TTLをテスト用に1分へ設定して、実時間で期限切れ通知を待ちます。通常は1〜2分かかります。結果は `artifacts/acceptance.json` に出力し、プロセスとテスト設定は終了時に片付けます。標準の1時間TTLはGoの時計を差し替えたテストで検証します。
 
 `test.ps1` はテスト用Chromiumを `tools/browsers` に配置します。スクリーンショットは `artifacts`、失敗時のトレースは `frontend/test-results`、HTMLレポートは `frontend/playwright-report` に出力します。これらはGit管理対象外です。
 
@@ -73,15 +73,14 @@ Viteも127.0.0.1だけで起動し、APIとWebSocketを8080へproxyします。
 
 1. `HomeClipboardCanvas.exe`、`config.json`、証明書、秘密鍵を同じフォルダへ置きます。
 2. `config.example.json` をコピーして `config.json` を作ります。
-3. `HomeClipboardCanvas.exe generate-token` で生成した32byteトークンを `config.json` の `token` に入れます。環境変数 `HCC_TOKEN` でも指定できます。
-4. 利用するホスト名・IPに適合し、各利用端末から信頼される証明書を用意して、`certificate` と `privateKey` を設定します。
-5. サーバーPCで明示的に起動します。
+3. 利用するホスト名・IPに適合し、各利用端末から信頼される証明書を用意して、`certificate` と `privateKey` を設定します。
+4. サーバーPCで明示的に起動します。
 
 ```powershell
 .\HomeClipboardCanvas.exe serve --config .\config.json
 ```
 
-証明書・秘密鍵・トークンが不正または未設定なら起動を拒否します。証明書ファイルの指定も可能です。
+証明書・秘密鍵が不正または未設定なら起動を拒否します。証明書ファイルの指定も可能です。
 
 ```powershell
 .\HomeClipboardCanvas.exe serve --config .\config.json --cert .\certificate.pem --key .\private-key.pem
@@ -89,11 +88,11 @@ Viteも127.0.0.1だけで起動し、APIとWebSocketを8080へproxyします。
 
 Firewall設定や名前解決の自動変更はありません。実運用のサーバーとLANに合わせて管理者が設定してください。`allowedNetworks` は標準のprivate/loopback CIDRに**追加**する設定です。外部公開向けの設計ではありません。
 
-初回アクセスはトークン入力画面、または `https://サーバー:8443/?token=共有トークン` を使います。共有URLからのトークンはフロントエンドの最初の処理で除去し、POSTで認証します。認証後はSecure・HttpOnly・SameSite=Strict Cookieを利用します。共有URL自体は秘密として扱ってください。
+LAN内の端末で `https://サーバー:8443/` を開くと、そのまま共有キャンバスに接続します。認証用Cookieは発行しません。接続元IPによる制限、HTTPS、更新APIとWebSocketの同一Originチェックを適用します。
 
 ## StartupとCLI
 
-サーバーPCで、証明書とトークンを含む有効な**config.json**を用意した後に登録できます。登録するショートカットの引数は `serve --config "絶対パス"` です。登録時だけの環境変数や `--cert` の値はショートカットに保存しません。
+サーバーPCで、証明書設定を含む有効な**config.json**を用意した後に登録できます。登録するショートカットの引数は `serve --config "絶対パス"` です。登録時だけの環境変数や `--cert` の値はショートカットに保存しません。
 
 ```powershell
 .\HomeClipboardCanvas.exe status --config .\config.json
@@ -110,6 +109,10 @@ Startupショートカットは現在のWindowsユーザーのStartupフォル�
 
 TTLは作成時から数えます。移動・サイズ変更では延長しません。30秒ごとの検出に加え、状態取得・画像取得・作成・更新時にも期限切れを除去します。削除・期限切れ・全削除時には画像バイナリも解放します。200MiBの制限は保持データとカードあたり1KiBの管理予算であり、Goランタイム・画像復号・HTTP転送を含むプロセス全体のRSS上限ではありません。RAMからの解放はGCに委ね、物理メモリのゼロ化やOSのページファイル消去は保証しません。
 
-ログには操作の種類とサイズだけを出力します。Clipboard内容、共有トークン、Cookie、URLは記録しません。設定・証明書・秘密鍵・トークン、生成物はGit管理対象外です。DB、履歴ファイル、Service Workerは使いません。
+ログには操作の種類とサイズだけを出力します。Clipboard内容やURLは記録しません。設定・証明書・秘密鍵、生成物はGit管理対象外です。DB、履歴ファイル、Service Workerは使いません。
 
 設計とAPIは [docs/design.md](docs/design.md)、検証の範囲は [docs/verification.md](docs/verification.md) を参照してください。
+
+## ライセンス
+
+このプロジェクトのソースコードは [MIT License](LICENSE) で公開しています。依存ライブラリのライセンスは [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) を参照してください。EXEを再配布する場合は、これらのライセンス文書も同梱してください。

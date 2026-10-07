@@ -1,8 +1,6 @@
 package config
 
 import (
-	"bytes"
-	"encoding/base64"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,7 +8,6 @@ import (
 
 func TestDevelopmentCannotBindLANAndHTTPSRequiresCertificates(t *testing.T) {
 	c := Default()
-	c.Token = base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{1}, 32))
 	c.DevHTTP = true
 	c.Bind = "0.0.0.0"
 	if c.Validate() == nil {

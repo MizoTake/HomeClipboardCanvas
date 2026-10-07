@@ -662,37 +662,21 @@ http://127.0.0.1:8080
 
 ---
 
-# 19. 認証
+# 19. アクセス制限
 
-LAN内限定でも、URLを知っているだけでアクセス可能にはしない。
+2026-10-07のユーザー指示により、共有トークン認証は使用しない。
 
-シンプルな共有シークレットを使用する。
-
-サーバー側：
+LAN内の端末はURLを開くだけでキャンバスを利用できる。
 
 ```text
-32byte random token
+https://clip.example/
 ```
 
-初回アクセス：
+認証画面、認証Cookie、トークン生成コマンドは不要。
 
-```text
-https://clip.example/?token=xxxxx
-```
+Backend側で実際の接続元IPを確認し、17節の許可ネットワーク以外は403で拒否する。
 
-認証成功後：
-
-```text
-Secure
-HttpOnly
-SameSite=Strict
-```
-
-Cookieを発行する。
-
-その後URLからtokenを除去する。
-
-WebSocketにも同じセッション認証を使用する。
+HTTPSと更新API・WebSocketの同一Originチェックを維持する。
 
 ---
 
@@ -718,7 +702,6 @@ X-Frame-Options: DENY
 - LAN外IP拒否
 - Request size limit
 - WebSocket origin check
-- Token authentication
 - HTTPS mandatory
 - Rate limit
 - MIME検証
@@ -814,14 +797,6 @@ HomeClipboardCanvas.exe version
 ```
 
 バージョン表示。
-
----
-
-```text
-HomeClipboardCanvas.exe generate-token
-```
-
-ランダム共有Token生成。
 
 ---
 
@@ -1082,7 +1057,7 @@ config.json
 .env
 ```
 
-秘密鍵・Token・証明書・実設定はGitへコミットしない。
+秘密鍵・証明書・実設定はGitへコミットしない。
 
 ---
 
@@ -1159,7 +1134,7 @@ Frontendの開発サーバーもlocalhost限定。
 - メモリ上限
 - Item数上限
 - LAN IP判定
-- Token認証
+- 認証なしのLANアクセスとLAN外IP拒否
 - WebSocket接続
 - WebSocket broadcast
 - Clear
@@ -1200,7 +1175,7 @@ MVP完成と判断する条件：
 13. サーバー再起動後にItemが復元されない
 14. LAN制限が動作する
 15. HTTPSに対応する
-16. Token認証が動作する
+16. LAN内ではトークンやログインなしで利用でき、LAN外IPは拒否する
 17. Startup登録機能が実装されている
 18. Startup解除機能が実装されている
 19. 開発PCのStartupには実際には登録されていない

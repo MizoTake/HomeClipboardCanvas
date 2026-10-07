@@ -1,6 +1,6 @@
 # 設計
 
-spec.md v0.1のMVPを対象にしています。Phase 2機能やインターネット公開は含みません。
+spec.md v0.1のMVPを対象にしています。LAN内のURLへの直接アクセスで利用し、トークン認証は使用しません。Phase 2機能やインターネットへのサーバー公開は含みません。
 
 ## 構成と選択理由
 
@@ -26,14 +26,13 @@ spec.md v0.1のMVPを対象にしています。Phase 2機能やインターネ�
 
 表示位置はWebSocketでは配信しません。クライアントの時計はsnapshotのserverTimeとの差を補正し、lastInteractionAtを比較して古い終了通知が新しい表示を上書きしないようにします。極端な未来時刻も拒否します。接続時にだけ保存位置を復元し、再接続snapshotでは現在の表示位置を維持します。
 
-切断中の操作は無効にし、未同期の内容をlocalStorageへ保存しません。再接続は1〜15秒のbackoff、OSのoffline/online通知でも切断・再接続します。起動し直したサーバーではセッション署名鍵が変わるため、再認証を要求します。
+切断中の操作は無効にし、未同期の内容をlocalStorageへ保存しません。再接続は1〜15秒のbackoff、OSのoffline/online通知でも切断・再接続します。サーバーの再起動後もログインやページ再読み込みなしで再接続し、空のsnapshotへ更新します。
 
 ## API
 
 | メソッド | パス | 内容 |
 | --- | --- | --- |
 | GET | /health | LAN内の起動確認、204。状態やデータは返さない |
-| POST | /api/session | JSON `{token}`。認証Cookieを発行 |
 | GET | /api/board | items、viewport、latest、limits、devices、serverTimeのsnapshot |
 | POST | /api/items | JSON `{text,x,y,width,height}`。作成して201 |
 | POST | /api/images?x=…&y=…&width=…&height=… | 生の画像バイナリ。Content-Typeはimage/png・jpeg・gif |
@@ -42,7 +41,7 @@ spec.md v0.1のMVPを対象にしています。Phase 2機能やインターネ�
 | DELETE | /api/items/{id} | カードと対応する画像を削除 |
 | DELETE | /api/board | 全削除 |
 | POST | /api/viewport | JSON `{x,y,zoom,lastInteractionAt,updatedAt?}` |
-| GET | /api/ws | 認証Cookieと同一Originを確認してWebSocketへupgrade |
+| GET | /api/ws | LAN接続元と同一Originを確認してWebSocketへupgrade |
 
 通知は `board.snapshot`、`item.created`、`item.updated`、`item.deleted`、`item.expired`、`board.cleared`、`devices.updated` です。JSONは未知フィールド、複数オブジェクト、不正な座標を拒否します。
 
@@ -50,10 +49,10 @@ spec.md v0.1のMVPを対象にしています。Phase 2機能やインターネ�
 
 実接続のRemoteAddrを確認し、X-Forwarded-Forは信頼しません。標準のprivate/loopback CIDRと追加CIDRだけを許可します。開発HTTPはbindと接続元の両方をloopbackに限定します。実運用はTLS 1.2以上と正しい証明書・秘密鍵を要求します。
 
-32byteの共有シークレットをbase64urlで設定します。比較にはSHA-256と定数時間比較を用います。セッションはサーバー起動時に生成する鍵で署名し、24時間で失効します。Cookieは本番で `__Host-`、Secure、HttpOnly、SameSite=Strict、Path=/です。開発HTTPに限りSecureを付けない別名のCookieを使用します。
+アクセス可否は接続元IPで判定します。許可したネットワーク内の端末はカードを閲覧・変更できます。共有トークン、認証用Cookie、ログインAPI、認証情報の環境変数は使いません。
 
-更新API・認証・WebSocketではscheme、Host、Originの一致を必須とします。CSP、nosniff、no-referrer、frame拒否、no-storeを設定します。HTMLは解釈せず、画像はMIME・実データ・サイズ・画素数を検証します。multipartやアップロード先ファイルは使いません。
+更新API・WebSocketではscheme、Host、Originの一致を必須とします。CSP、nosniff、no-referrer、frame拒否、no-storeを設定します。HTMLは解釈せず、画像はMIME・実データ・サイズ・画素数を検証します。multipartやアップロード先ファイルは使いません。
 
-IPごとのAPIレートは80件burst・毎秒4件補充、ログインは8件burst・10秒に1件補充です。レート情報は最大2,048キーに制限し、古いキーを回収します。同時カード作成処理はテキストと画像を合わせて2件までです。テキストのJSONエスケープによる増加はリクエスト上限に織り込み、復号後のUTF-8サイズでテキスト上限を判定します。
+IPごとのAPIレートは80件burst・毎秒4件補充です。レート情報は最大2,048キーに制限し、古いキーを回収します。同時カード作成処理はテキストと画像を合わせて2件までです。テキストのJSONエスケープによる増加はリクエスト上限に織り込み、復号後のUTF-8サイズでテキスト上限を判定します。
 
 ディスクへ永続化できるのは、明示的に用意した起動設定と証明書だけです。実サーバー向けのProgramData自動保存や証明書・Firewallの自動設定は実装していません。MVPのportable構成では、EXE隣のconfig.jsonまたは --configを使います。

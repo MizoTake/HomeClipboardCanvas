@@ -9,6 +9,5 @@
   "allowedNetworks": [],
   "certificate": "certificate.pem",
   "privateKey": "private-key.pem",
-  "token": "REPLACE_WITH_GENERATE_TOKEN_OUTPUT",
   "logLevel": "INFO"
 }

@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/tls"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -41,15 +39,8 @@ func run(args []string) error {
 	case "version":
 		fmt.Println("HomeClipboardCanvas", version)
 		return nil
-	case "generate-token":
-		data := make([]byte, 32)
-		if _, err := rand.Read(data); err != nil {
-			return err
-		}
-		fmt.Println(base64.RawURLEncoding.EncodeToString(data))
-		return nil
 	case "help", "--help", "-h":
-		fmt.Println("HomeClipboardCanvas serve|version|generate-token|status|install-startup|uninstall-startup\nserve: --config path --bind IP --port 8443 --cert certificate.pem --key private-key.pem --dev-http\nSet HCC_TOKEN or config.token. Startup commands are for the actual server PC only.")
+		fmt.Println("HomeClipboardCanvas serve|version|status|install-startup|uninstall-startup\nserve: --config path --bind IP --port 8443 --cert certificate.pem --key private-key.pem --dev-http\nLAN access needs no authentication. Startup commands are for the actual server PC only.")
 		return nil
 	case "serve", "status", "install-startup", "uninstall-startup":
 	default:
@@ -83,9 +74,6 @@ func run(args []string) error {
 	if os.IsNotExist(err) {
 		c = config.Default()
 	}
-	if env := os.Getenv("HCC_TOKEN"); env != "" {
-		c.Token = env
-	}
 	c.DevHTTP = *dev
 	if *dev {
 		c.Bind, c.Port = "127.0.0.1", 8080
@@ -111,7 +99,7 @@ func run(args []string) error {
 		case "status":
 			validation := "ready"
 			if c.Validate() != nil {
-				validation = "incomplete; check token, certificates and limits"
+				validation = "incomplete; check certificates and limits"
 			}
 			return json.NewEncoder(os.Stdout).Encode(map[string]any{"version": version, "configExists": fileExists(abs), "configuration": validation, "startupRegistered": manager.Installed(), "bind": c.Bind, "port": c.Port})
 		case "install-startup":
@@ -150,10 +138,7 @@ func run(args []string) error {
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 	networks, _ := c.Networks()
-	app, err := server.New(server.Options{Token: c.Token, DevHTTP: c.DevHTTP, Limits: c.Limits(), AllowedNetworks: networks, Assets: web.Assets(), Logger: logger})
-	if err != nil {
-		return err
-	}
+	app := server.New(server.Options{DevHTTP: c.DevHTTP, Limits: c.Limits(), AllowedNetworks: networks, Assets: web.Assets(), Logger: logger})
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	go app.ExpireLoop(ctx)

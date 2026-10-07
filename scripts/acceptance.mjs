@@ -1,6 +1,5 @@
 import { chromium } from '../frontend/node_modules/playwright/index.mjs';
 import { spawn } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import { mkdir, copyFile, writeFile, rm } from 'node:fs/promises';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
@@ -15,7 +14,6 @@ await mkdir(sandbox, { recursive: true });
 const exe = path.join(sandbox, 'HomeClipboardCanvas.exe');
 await copyFile(path.join(root, 'dist', 'HomeClipboardCanvas.exe'), exe);
 const config = path.join(sandbox, 'config.json');
-const token = randomBytes(32).toString('base64url');
 const portReservation = createServer();
 await new Promise(resolve => portReservation.listen(0, '127.0.0.1', resolve));
 const port = portReservation.address().port;
@@ -28,7 +26,7 @@ async function stop() {
 }
 async function start(ttlMinutes) {
   await writeFile(config, JSON.stringify({ ttlMinutes }), 'utf8');
-  child = spawn(exe, ['serve', '--dev-http', '--bind', '127.0.0.1', '--port', String(port), '--config', config], { cwd: sandbox, env: { ...process.env, HCC_TOKEN: token }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  child = spawn(exe, ['serve', '--dev-http', '--bind', '127.0.0.1', '--port', String(port), '--config', config], { cwd: sandbox, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   let stderr = '';
   child.stderr.on('data', chunk => { stderr += chunk });
   child.stdout.resume();
@@ -41,9 +39,8 @@ async function start(ttlMinutes) {
 }
 async function connect(page) {
   await page.goto(url);
-  await page.getByLabel('共有トークン', { exact: true }).fill(token);
-  await page.getByRole('button', { name: 'キャンバスを開く' }).click();
   await page.getByText(/\d+ 台 接続中/).waitFor();
+  assert.deepEqual(await page.context().cookies(), []);
 }
 async function create(page, text) {
   await page.getByRole('button', { name: 'テキストを置く' }).first().click();
@@ -69,12 +66,14 @@ try {
   });
   await page.getByLabel('画像ファイル', { exact: true }).setInputFiles({ name: 'fixture.png', mimeType: 'image/png', buffer: Buffer.from(image, 'base64') });
   await page.locator('.card.image').waitFor();
+  await page.getByText(/\d+ 台 接続中/).waitFor();
   await stop();
+  await page.getByText('再接続中…', { exact: true }).waitFor();
   await start(1);
-  await page.reload();
-  await connect(page);
+  await page.getByText(/\d+ 台 接続中/).waitFor();
   assert.equal(await page.locator('.card').count(), 0);
-  results.push('EXE終了・再起動でテキストと画像が復元されずセッションも再認証');
+  assert.deepEqual(await page.context().cookies(), []);
+  results.push('EXE終了・再起動後、ログインや再読み込みなしで自動再接続し空のキャンバスを表示');
   await create(page, '実時間TTLの対象');
   const started = Date.now();
   console.log('実時間TTLを検証中: 1分設定＋最大30秒の検出間隔');
